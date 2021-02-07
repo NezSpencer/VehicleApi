@@ -20,8 +20,7 @@ public class Details {
     private String model;
 
     @NotNull
-    @ManyToOne(cascade = CascadeType.ALL)
-    @JoinColumn(name = "MANUFACTURER_CODE")
+    @ManyToOne
     private Manufacturer manufacturer;
 
     private Integer numberOfDoors;
