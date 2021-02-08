@@ -63,7 +63,12 @@ public class CarService {
 
         Location location = car.getLocation();
         Address address = getAddressForCar(location);
-        location.setAddress(address.getAddress());
+        if (address != null) {
+            location.setAddress(address.getAddress());
+            location.setCity(address.getCity());
+            location.setState(address.getState());
+            location.setZip(address.getZip());
+        }
         car.setLocation(location);
 
 
@@ -106,17 +111,22 @@ public class CarService {
         try {
             return pricingWebClient.get().uri(uriBuilder -> uriBuilder.path("/services/price").queryParam("vehicleId", carId).build()).retrieve().bodyToMono(Price.class).block();
         } catch (Exception ex) {
-            log.error("Something went wrong -> "+ex.getMessage());
+            log.error("Price could not be fetched because -> "+ex.getMessage());
             return null;
         }
     }
 
     private Address getAddressForCar(Location location) {
-        return mapsWebClient.get().uri(uriBuilder -> uriBuilder
-                .path("/maps")
-                .queryParam("lat", location.getLat())
-                .queryParam("lon", location.getLon())
-                .build())
-                .retrieve().bodyToMono(Address.class).single().block();
+        try{
+            return mapsWebClient.get().uri(uriBuilder -> uriBuilder
+                    .path("/maps")
+                    .queryParam("lat", location.getLat())
+                    .queryParam("lon", location.getLon())
+                    .build())
+                    .retrieve().bodyToMono(Address.class).block();
+        } catch (Exception ex) {
+            log.error("Address could not be fetched because -> "+ex.getMessage());
+            return null;
+        }
     }
 }
