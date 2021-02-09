@@ -64,8 +64,15 @@ public class CarControllerTest {
     public void setup() {
         Car car = getCar();
         car.setId(1L);
-        given(carService.save(any())).willReturn(car);
-        given(carService.findById(any())).willReturn(car);
+        given(carService.save(any(Car.class))).willAnswer(invocationOnMock -> {
+            Car passedCar = invocationOnMock.getArgument(0);
+            if (passedCar.getId() == null) {
+                passedCar.setId(1L);
+                return passedCar;
+            }
+            return getUpdatedCar();
+        });
+        given(carService.findById(any(Long.class))).willReturn(car);
         given(carService.list()).willReturn(Collections.singletonList(car));
     }
 
@@ -76,12 +83,14 @@ public class CarControllerTest {
     @Test
     public void createCar() throws Exception {
         Car car = getCar();
-        mvc.perform(
+        MvcResult result = mvc.perform(
                 post(new URI("/cars"))
                         .content(json.write(car).getJson())
                         .contentType(MediaType.APPLICATION_JSON_UTF8)
                         .accept(MediaType.APPLICATION_JSON_UTF8))
-                .andExpect(status().isCreated());
+                .andExpect(status().isCreated()).andReturn();
+        Car actualReturnedCar = new ObjectMapper().readValue(result.getResponse().getContentAsString(), Car.class);
+        Assert.assertEquals(car.getCreatedAt(), actualReturnedCar.getCreatedAt());
     }
 
     /**
@@ -125,6 +134,29 @@ public class CarControllerTest {
         Car actualReturnedCar = new ObjectMapper().readValue(result.getResponse().getContentAsString(), Car.class);
         Assert.assertEquals(expectedCar.getId(), actualReturnedCar.getId());
         Assert.assertEquals(expectedCar.getCreatedAt(), actualReturnedCar.getCreatedAt());
+
+    }
+
+    /**
+     * Tests the Update operation for a single car by ID.
+     *
+     * @throws Exception if the Update operation for a single car fails
+     */
+    @Test
+    public void updateCar() throws Exception {
+        Car expectedCar = getUpdatedCar();
+        MvcResult result = mvc.perform(
+                put(new URI(("/cars/" + expectedCar.getId())))
+                        .content(json.write(getCar()).getJson())
+                        .contentType(MediaType.APPLICATION_JSON_UTF8)
+                        .accept(MediaType.APPLICATION_JSON_UTF8))
+                .andExpect(status().isOk()).andReturn();
+
+        Car actualReturnedCar = new ObjectMapper().readValue(result.getResponse().getContentAsString(), Car.class);
+        Assert.assertEquals(expectedCar.getId(), actualReturnedCar.getId());
+        Assert.assertEquals(expectedCar.getCondition(), actualReturnedCar.getCondition());
+        Assert.assertEquals(expectedCar.getLocation().getLat(), actualReturnedCar.getLocation().getLat());
+        Assert.assertEquals(expectedCar.getLocation().getLon(), actualReturnedCar.getLocation().getLon());
 
     }
 
@@ -177,6 +209,14 @@ public class CarControllerTest {
         details.setNumberOfDoors(4);
         car.setDetails(details);
         car.setCondition(Condition.USED);
+        return car;
+    }
+
+    private Car getUpdatedCar() {
+        Car car = getCar();
+        car.setId(1L);
+        car.setLocation(new Location(6.5244, 3.3792));
+        car.setCondition(Condition.NEW);
         return car;
     }
 }

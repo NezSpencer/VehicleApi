@@ -1,20 +1,17 @@
 package com.udacity.vehicles.service;
 
-import com.udacity.vehicles.client.maps.Address;
-import com.udacity.vehicles.client.prices.Price;
-import com.udacity.vehicles.domain.Location;
+import com.udacity.vehicles.client.maps.MapsClient;
+import com.udacity.vehicles.client.prices.PriceClient;
 import com.udacity.vehicles.domain.car.Car;
 import com.udacity.vehicles.domain.car.CarRepository;
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
 
 /**
  * Implements the car service create, read, update or delete
@@ -25,15 +22,15 @@ import org.springframework.web.reactive.function.client.WebClient;
 public class CarService {
 
     private final CarRepository repository;
-    private final WebClient mapsWebClient;
-    private final WebClient pricingWebClient;
+    private final MapsClient mapsClient;
+    private final PriceClient priceClient;
     private static final Logger log = LoggerFactory.getLogger(CarService.class);
 
     @Autowired
-    public CarService(CarRepository repository, @Qualifier("maps") WebClient mapsWebClient, @Qualifier("pricing") WebClient pricingWebClient) {
+    public CarService(CarRepository repository, MapsClient mapsClient, PriceClient priceClient) {
         this.repository = repository;
-        this.mapsWebClient = mapsWebClient;
-        this.pricingWebClient = pricingWebClient;
+        this.mapsClient = mapsClient;
+        this.priceClient = priceClient;
     }
 
     /**
@@ -41,7 +38,12 @@ public class CarService {
      * @return a list of all vehicles in the CarRepository
      */
     public List<Car> list() {
-        return repository.findAll();
+        List<Car> cars =  repository.findAll();
+        cars.forEach(it -> {
+            it.setPrice(priceClient.getPrice(it.getId()));
+            it.setLocation(mapsClient.getAddress(it.getLocation()));
+        });
+        return cars;
     }
 
     /**
@@ -56,20 +58,9 @@ public class CarService {
         }
         Car car = carToFind.get();
 
-        Price price = getPriceForCar(car.getId());
-        if (price != null) {
-            car.setPrice(price.getPrice().toPlainString());
-        }
-
-        Location location = car.getLocation();
-        Address address = getAddressForCar(location);
-        if (address != null) {
-            location.setAddress(address.getAddress());
-            location.setCity(address.getCity());
-            location.setState(address.getState());
-            location.setZip(address.getZip());
-        }
-        car.setLocation(location);
+        String price = priceClient.getPrice(car.getId());
+        car.setPrice(price);
+        car.setLocation(mapsClient.getAddress(car.getLocation()));
 
 
         return car;
@@ -86,6 +77,7 @@ public class CarService {
                     .map(carToBeUpdated -> {
                         carToBeUpdated.setDetails(car.getDetails());
                         carToBeUpdated.setLocation(car.getLocation());
+                        carToBeUpdated.setCondition(car.getCondition());
                         return repository.save(carToBeUpdated);
                     }).orElseThrow(CarNotFoundException::new);
         }
@@ -105,28 +97,5 @@ public class CarService {
             throw new CarNotFoundException("Car with id "+id+" does not exist");
         }
         repository.delete(carToDelete.get());
-    }
-
-    private Price getPriceForCar(Long carId) {
-        try {
-            return pricingWebClient.get().uri(uriBuilder -> uriBuilder.path("/services/price").queryParam("vehicleId", carId).build()).retrieve().bodyToMono(Price.class).block();
-        } catch (Exception ex) {
-            log.error("Price could not be fetched because -> "+ex.getMessage());
-            return null;
-        }
-    }
-
-    private Address getAddressForCar(Location location) {
-        try{
-            return mapsWebClient.get().uri(uriBuilder -> uriBuilder
-                    .path("/maps")
-                    .queryParam("lat", location.getLat())
-                    .queryParam("lon", location.getLon())
-                    .build())
-                    .retrieve().bodyToMono(Address.class).block();
-        } catch (Exception ex) {
-            log.error("Address could not be fetched because -> "+ex.getMessage());
-            return null;
-        }
     }
 }
